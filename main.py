@@ -258,46 +258,5 @@ def create_sample_dependency(name: str, test_version: str, prod_version: str = N
         return json.dumps({"error": str(e)}, indent=2)
 
 
-@mcp.tool()
-def fetch_video_transcript(url: str) -> str:
-    """
-    Returns sample data for testing
-
-    Args:
-        url (str): Any URL (not used, just for compatibility)
-
-    Returns:
-        str: Sample formatted data
-    """
-    sample_data = """[00:00] Welcome to this sample video transcript
-[00:15] This is just test data for the MCP server
-[00:30] You can use this for quick testing without API calls
-[00:45] The data is returned instantly
-[01:00] No external dependencies required
-[01:15] Perfect for development and testing
-[01:30] Thank you for watching"""
-    
-    return sample_data
-
-@mcp.tool()
-def fetch_instructions(prompt_name: str) -> str:
-    """
-    Fetch instructions for a given prompt name from the prompts/ directory
-
-    Args:
-        prompt_name (str): Name of the prompt to fetch instructions for
-        Available prompts: 
-            - write_blog_post
-            - write_social_post
-            - write_video_chapters
-
-    Returns:
-        str: Instructions for the given prompt
-    """
-    script_dir = os.path.dirname(__file__)
-    prompt_path = os.path.join(script_dir, "prompts", f"{prompt_name}.md")
-    with open(prompt_path, "r") as f:
-        return f.read()
-
 if __name__ == "__main__":
     mcp.run(transport='streamable-http')
