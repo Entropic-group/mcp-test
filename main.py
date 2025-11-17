@@ -8,22 +8,14 @@ from pydantic import AnyHttpUrl
 from dotenv import load_dotenv
 
 from utils.auth import create_auth0_verifier
-from models import init_db, get_session_maker, seed_sample_data
 from service import DependencyService
 from stats import get_dependency_health_overview, get_stale_dependencies
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Initialize database
-init_db()
-
-# Populate with sample data on first run
-seed_sample_data()
-
 # Initialize service layer
 dependency_service = DependencyService()
-session_maker = get_session_maker()
 
 # Get Auth0 configuration from environment
 auth0_domain = os.getenv("AUTH0_DOMAIN")
@@ -212,14 +204,11 @@ def get_health_overview() -> str:
     Returns:
         str: JSON string containing health overview metrics
     """
-    session = session_maker()
     try:
-        overview = get_dependency_health_overview(session)
+        overview = get_dependency_health_overview()
         return json.dumps(overview, indent=2)
     except Exception as e:
         return json.dumps({"error": str(e)}, indent=2)
-    finally:
-        session.close()
 
 
 @mcp.tool()
@@ -233,14 +222,11 @@ def get_stale_dependencies_tool(days_threshold: int = 180) -> str:
     Returns:
         str: JSON string containing stale dependency information
     """
-    session = session_maker()
     try:
-        stale_info = get_stale_dependencies(session, days_threshold)
+        stale_info = get_stale_dependencies(days_threshold)
         return json.dumps(stale_info, indent=2)
     except Exception as e:
         return json.dumps({"error": str(e)}, indent=2)
-    finally:
-        session.close()
 
 
 @mcp.tool()

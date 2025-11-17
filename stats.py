@@ -1,13 +1,13 @@
 """
 Statistics and health check functions for dependency analysis.
+Simple in-memory implementation.
 """
 from typing import Dict
 from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
-from models import Dependency
+from models import DEPENDENCIES
 
 
-def get_dependency_health_overview(session: Session) -> Dict:
+def get_dependency_health_overview() -> Dict:
     """
     Get comprehensive health overview of all dependencies.
     
@@ -22,44 +22,64 @@ def get_dependency_health_overview(session: Session) -> Dict:
     - recentlyUpdatedCount: count of dependencies updated in last 30 days
     - recentlyUpdatedDependencies: list of recently updated dependency names
     """
-    all_dependencies = session.query(Dependency).all()
-    total_count = len(all_dependencies)
+    total_count = len(DEPENDENCIES)
     
     # calculate version drift (test version != prod version)
     version_drift_deps = []
-    for dep in all_dependencies:
-        if dep.prod_version and dep.test_version != dep.prod_version:
-            version_drift_deps.append(dep.name)
+    for dep in DEPENDENCIES:
+        prod_version = dep.get("prodVersion")
+        test_version = dep.get("testVersion")
+        if prod_version and test_version != prod_version:
+            version_drift_deps.append(dep["name"])
     
     # calculate overdue updates (next update dates in the past)
     now = datetime.utcnow()
     overdue_deps = []
-    for dep in all_dependencies:
+    for dep in DEPENDENCIES:
         is_overdue = False
-        if dep.test_next_update and dep.test_next_update < now:
-            is_overdue = True
-        if dep.production_next_update and dep.production_next_update < now:
-            is_overdue = True
+        
+        test_next = dep.get("testNextUpdate")
+        if test_next:
+            test_next_date = datetime.fromisoformat(test_next)
+            if test_next_date < now:
+                is_overdue = True
+        
+        prod_next = dep.get("productionNextUpdate")
+        if prod_next:
+            prod_next_date = datetime.fromisoformat(prod_next)
+            if prod_next_date < now:
+                is_overdue = True
+        
         if is_overdue:
-            overdue_deps.append(dep.name)
+            overdue_deps.append(dep["name"])
     
     # calculate test-only dependencies (no prod version)
     test_only_deps = []
-    for dep in all_dependencies:
-        if not dep.prod_version or dep.prod_version.strip() == "":
-            test_only_deps.append(dep.name)
+    for dep in DEPENDENCIES:
+        prod_version = dep.get("prodVersion")
+        if not prod_version:
+            test_only_deps.append(dep["name"])
     
     # calculate recently updated (last 30 days)
     thirty_days_ago = now - timedelta(days=30)
     recently_updated_deps = []
-    for dep in all_dependencies:
+    for dep in DEPENDENCIES:
         is_recent = False
-        if dep.test_last_updated and dep.test_last_updated >= thirty_days_ago:
-            is_recent = True
-        if dep.production_last_updated and dep.production_last_updated >= thirty_days_ago:
-            is_recent = True
+        
+        test_updated = dep.get("testLastUpdated")
+        if test_updated:
+            test_date = datetime.fromisoformat(test_updated)
+            if test_date >= thirty_days_ago:
+                is_recent = True
+        
+        prod_updated = dep.get("productionLastUpdated")
+        if prod_updated:
+            prod_date = datetime.fromisoformat(prod_updated)
+            if prod_date >= thirty_days_ago:
+                is_recent = True
+        
         if is_recent:
-            recently_updated_deps.append(dep.name)
+            recently_updated_deps.append(dep["name"])
     
     return {
         "totalCount": total_count,
@@ -74,12 +94,11 @@ def get_dependency_health_overview(session: Session) -> Dict:
     }
 
 
-def get_stale_dependencies(session: Session, days_threshold: int = 180) -> Dict:
+def get_stale_dependencies(days_threshold: int = 180) -> Dict:
     """
     Find dependencies that haven't been updated in the specified number of days.
     
     Args:
-        session: Database session
         days_threshold: Number of days to consider a dependency stale (default: 180)
     
     Returns:
@@ -93,35 +112,39 @@ def get_stale_dependencies(session: Session, days_threshold: int = 180) -> Dict:
     now = datetime.utcnow()
     threshold_date = now - timedelta(days=days_threshold)
     
-    all_dependencies = session.query(Dependency).all()
     stale_deps = []
     oldest_dep = None
     oldest_days = 0
     
-    for dep in all_dependencies:
+    for dep in DEPENDENCIES:
         # get the most recent update date (either test or prod)
         last_updated = None
-        if dep.test_last_updated and dep.production_last_updated:
-            last_updated = max(dep.test_last_updated, dep.production_last_updated)
-        elif dep.test_last_updated:
-            last_updated = dep.test_last_updated
-        elif dep.production_last_updated:
-            last_updated = dep.production_last_updated
         
-        # if no update dates, consider it stale
+        test_updated = dep.get("testLastUpdated")
+        prod_updated = dep.get("productionLastUpdated")
+        
+        if test_updated and prod_updated:
+            test_date = datetime.fromisoformat(test_updated)
+            prod_date = datetime.fromisoformat(prod_updated)
+            last_updated = max(test_date, prod_date)
+        elif test_updated:
+            last_updated = datetime.fromisoformat(test_updated)
+        elif prod_updated:
+            last_updated = datetime.fromisoformat(prod_updated)
+        
+        # if no update dates, use created date
         if not last_updated:
-            stale_deps.append(dep.name)
-            # calculate days since created
-            days_old = (now - dep.created_at).days
-            if days_old > oldest_days:
-                oldest_days = days_old
-                oldest_dep = dep.name
-        elif last_updated < threshold_date:
-            stale_deps.append(dep.name)
+            created = dep.get("createdAt")
+            if created:
+                last_updated = datetime.fromisoformat(created)
+        
+        # check if stale
+        if last_updated and last_updated < threshold_date:
+            stale_deps.append(dep["name"])
             days_old = (now - last_updated).days
             if days_old > oldest_days:
                 oldest_days = days_old
-                oldest_dep = dep.name
+                oldest_dep = dep["name"]
     
     return {
         "staleDependencies": stale_deps,
@@ -130,3 +153,4 @@ def get_stale_dependencies(session: Session, days_threshold: int = 180) -> Dict:
         "oldestDependency": oldest_dep,
         "oldestDependencyDays": oldest_days,
     }
+
