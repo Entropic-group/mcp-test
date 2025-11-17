@@ -30,7 +30,7 @@ token_verifier = create_auth0_verifier()
 mcp = FastMCP(
     "yt-mcp",
     instructions=server_instructions,
-    # host="0.0.0.0",
+    host="0.0.0.0",
     # OAuth Configuration
     token_verifier=token_verifier,
     auth=AuthSettings(
@@ -82,5 +82,4 @@ def fetch_instructions(prompt_name: str) -> str:
         return f.read()
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    mcp.run(transport='streamable-http', host="0.0.0.0", port=port)
+    mcp.run(transport='streamable-http')
